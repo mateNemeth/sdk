@@ -1,0 +1,43 @@
+{
+  "name": "@tallyroot/sdk",
+  "version": "0.1.0",
+  "description": "Official TypeScript SDK for the Tallyroot ingest API",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "tallyroot",
+    "budgeting",
+    "ingest",
+    "api",
+    "sdk",
+    "finance",
+    "transactions"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tallyroot/sdk.git"
+  },
+  "homepage": "https://tallyroot.com/docs/sdk",
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
