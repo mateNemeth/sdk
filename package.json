@@ -34,7 +34,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tallyroot/sdk.git"
+    "url": "https://github.com/mateNemeth/sdk.git"
   },
   "homepage": "https://tallyroot.com/docs/sdk",
   "devDependencies": {
