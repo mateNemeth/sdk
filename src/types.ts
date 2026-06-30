@@ -50,4 +50,11 @@ export interface IngestResult {
   created: number;
   skipped: number;
   restated: number;
+  /**
+   * Number of entries booked WITHOUT a base amount because an FX rate for a
+   * non-base currency could not be resolved (e.g. a provider outage). These
+   * land as `valuationStatus` 'pending' and are invisible to net worth until
+   * backfilled; a non-zero value signals the batch needs an FX backfill.
+   */
+  unresolvedFx: number;
 }
