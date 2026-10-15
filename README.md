@@ -22,6 +22,9 @@ Official TypeScript SDK for the [Tallyroot](https://tallyroot.com) ingest API. P
   - [IngestFxUpsert](#ingestfxupsert)
   - [IngestTransferUpsert](#ingesttransferupsert)
   - [IngestBalanceSnapshot](#ingestbalancesnapshot)
+- [Ingest Limits](#ingest-limits)
+  - [Items per request](#items-per-request)
+  - [Amount range](#amount-range)
 - [TallyrootApiError](#tallyrootapierror)
 - [Error Handling](#error-handling)
 - [Money Helpers](#money-helpers)
@@ -331,6 +334,20 @@ interface IngestBalanceSnapshot {
 
 ---
 
+## Ingest Limits
+
+### Items per request
+
+The server accepts at most 1000 items per array in one request to `/api/v1/ingest/*`. The SDK splits larger inputs for you: `upsertTransactions`, `upsertFx`, `upsertTransfers`, and `pushBalanceSnapshots` send their input in requests of at most 500 items, one request at a time and in the order you passed them, and return one result with the counts added up.
+
+The server applies each request atomically, but a split call is several requests. If one of them fails, the method throws the `TallyrootApiError` from that request, and the requests before it stay applied. Re-running the whole call is safe, because the ingest endpoints are idempotent upserts: the server matches transactions, FX trades, and transfers by `source` and `externalTxnId`, and balance snapshots by account, currency, and `snapshotAt`. On the re-run, the items that were already applied count as `skipped` or `restated` instead of `created`.
+
+### Amount range
+
+Every amount field on `/api/v1/ingest/*` must be within plus or minus 9223372036854775807, the range of a Postgres `int8` column. The server answers an out-of-range amount with HTTP 400, and the `issues` array in the response body names the item path, such as `["transactions", 3, "amountMinor"]`. The SDK throws this as a `TallyrootApiError` with `code === 'VALIDATION_ERROR'` and the message `Invalid request body`, and does not expose `issues`. If the SDK split your input, the index in that path counts from the start of the failing request, not from the start of your array.
+
+---
+
 ## TallyrootApiError
 
 All API failures throw a `TallyrootApiError`. It extends the standard `Error` class and adds structured fields.
@@ -513,7 +530,7 @@ The Tallyroot API allows **120 requests per minute** per API key. Requests that 
 
 **Tips for staying within limits:**
 
-- **Batch aggressively.** Each of the upsert methods accepts an array. A single call with 500 transactions counts as one request, not 500.
+- **Batch aggressively.** Each of the upsert methods accepts an array. A single call with 500 transactions counts as one request, not 500. A larger call counts as one request per 500 items, because the SDK splits it (see [Items per request](#items-per-request)), so a 429 can arrive after earlier parts of the call were applied.
 - **Respect `Retry-After`.** The SDK surfaces this as `TallyrootApiError.retryAfter`. Use it directly rather than guessing a back-off interval.
 - **Avoid polling.** Push transactions as events happen (or in scheduled batch jobs) rather than repeatedly checking and re-syncing the same window.
 - **Use a single source per connector.** The `source` field is for traceability, not for splitting traffic — all keys share the same per-workspace limit.
