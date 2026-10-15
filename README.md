@@ -72,7 +72,7 @@ const client = new TallyrootClient({
 const result = await client.upsertTransactions([
   {
     externalTxnId: 'txn_abc123',
-    accountId: 'acc_checking',
+    accountId: '3f6c1d2e-8a4b-4c7e-9d1f-2b5a6e8c0a11',
     bookedAt: '2024-03-15T10:30:00Z',
     currency: 'USD',
     amountMinor: toMinor('-45.50', 2), // → "-4550"
@@ -82,7 +82,7 @@ const result = await client.upsertTransactions([
 ]);
 
 console.log(result);
-// { created: 1, skipped: 0, restated: 0 }
+// { created: 1, skipped: 0, restated: 0, unresolvedFx: 0 }
 ```
 
 ---
@@ -128,7 +128,7 @@ Create or update regular account transactions. Each transaction is identified by
 const result = await client.upsertTransactions([
   {
     externalTxnId: 'txn_001',
-    accountId: 'acc_checking',
+    accountId: '3f6c1d2e-8a4b-4c7e-9d1f-2b5a6e8c0a11',
     bookedAt: '2024-03-15T00:00:00Z',
     currency: 'USD',
     amountMinor: '-2500',       // -$25.00
@@ -137,7 +137,7 @@ const result = await client.upsertTransactions([
   },
   {
     externalTxnId: 'txn_002',
-    accountId: 'acc_checking',
+    accountId: '3f6c1d2e-8a4b-4c7e-9d1f-2b5a6e8c0a11',
     bookedAt: '2024-03-16T00:00:00Z',
     currency: 'USD',
     amountMinor: '150000',      // +$1,500.00 (incoming)
@@ -155,17 +155,17 @@ const result = await client.upsertTransactions([
 client.upsertFx(fxTransactions: IngestFxUpsert[]): Promise<IngestResult>
 ```
 
-Create or update foreign-exchange transactions that move money between two currencies. The `fromAmountMinor` is always negative (outflow) and `toAmountMinor` is always positive (inflow) — or vice versa depending on your account perspective. Both amounts must be in the minor units of their respective currencies.
+Create or update foreign-exchange transactions that move money between two currencies. `fromAmountMinor` and `toAmountMinor` are magnitudes: send both as non-negative values, each in the minor units of its own currency. Tallyroot applies the sign itself, debiting `fromAmountMinor` from the from account and crediting `toAmountMinor` to the to account. The server rejects a negative value with HTTP 400.
 
 ```ts
 const result = await client.upsertFx([
   {
     externalTxnId: 'fx_001',
-    fromAccountId: 'acc_usd_checking',
-    toAccountId: 'acc_eur_checking',
-    fromAmountMinor: '-100000',   // -$1,000.00 USD
+    fromAccountId: '3f6c1d2e-8a4b-4c7e-9d1f-2b5a6e8c0a11',
+    toAccountId: 'c4d5e6f7-a8b9-4c0d-a1e2-f3a4b5c6d7e8',
+    fromAmountMinor: '100000',    // $1,000.00 leaves the USD account
     fromCurrency: 'USD',
-    toAmountMinor: '92000',       // +€920.00 EUR
+    toAmountMinor: '92000',       // €920.00 arrives in the EUR account
     toCurrency: 'EUR',
     bookedAt: '2024-03-15T14:00:00Z',
     description: 'Wise transfer',
@@ -181,14 +181,14 @@ const result = await client.upsertFx([
 client.upsertTransfers(transfers: IngestTransferUpsert[]): Promise<IngestResult>
 ```
 
-Create or update internal transfers between two accounts in the same currency. Tallyroot will cancel out both legs so the transfer does not inflate income or expenses.
+Create or update internal transfers between two accounts in the same currency. Tallyroot will cancel out both legs so the transfer does not inflate income or expenses. `amountMinor` is a magnitude: send it as a non-negative value, and Tallyroot debits it from the from account and credits it to the to account. The server rejects a negative value with HTTP 400.
 
 ```ts
 const result = await client.upsertTransfers([
   {
     externalTxnId: 'xfer_001',
-    fromAccountId: 'acc_checking',
-    toAccountId: 'acc_savings',
+    fromAccountId: '3f6c1d2e-8a4b-4c7e-9d1f-2b5a6e8c0a11',
+    toAccountId: '7b2e4f90-1c3d-4a5b-8e6f-0a1b2c3d4e5f',
     amountMinor: '50000',         // $500.00
     currency: 'USD',
     bookedAt: '2024-03-15T09:00:00Z',
@@ -210,13 +210,13 @@ Push point-in-time balance snapshots for reconciliation. Tallyroot uses these to
 ```ts
 const result = await client.pushBalanceSnapshots([
   {
-    accountId: 'acc_checking',
+    accountId: '3f6c1d2e-8a4b-4c7e-9d1f-2b5a6e8c0a11',
     currency: 'USD',
     balanceMinor: '254370',       // $2,543.70
     snapshotAt: '2024-03-15T23:59:59Z',
   },
   {
-    accountId: 'acc_savings',
+    accountId: '7b2e4f90-1c3d-4a5b-8e6f-0a1b2c3d4e5f',
     currency: 'USD',
     balanceMinor: '1500000',      // $15,000.00
     snapshotAt: '2024-03-15T23:59:59Z',
@@ -254,6 +254,7 @@ Returned by `upsertTransactions`, `upsertFx`, and `upsertTransfers`.
 | `created` | `number` | New records that were inserted. |
 | `skipped` | `number` | Records that were identical to an existing record and required no change. |
 | `restated` | `number` | Records that existed but had at least one changed field and were updated. |
+| `unresolvedFx` | `number` | Records booked without a base-currency amount, because Tallyroot could not resolve an FX rate from the record's currency to your workspace's base currency. Tallyroot marks their valuation as pending and leaves them out of net worth until the rate is backfilled. A value above 0 means part of the batch needs an FX backfill. Records never count here when they are in the base currency (for an FX trade, when either side is), or when you send the base amount yourself in `baseAmountMinor`, or in `baseFromAmountMinor` and `baseToAmountMinor`. |
 
 ---
 
@@ -264,9 +265,9 @@ Returned by `upsertTransactions`, `upsertFx`, and `upsertTransfers`.
 ```ts
 interface IngestTransactionUpsert {
   externalTxnId: string;               // Your stable, unique transaction ID
-  accountId: string;                   // Tallyroot account identifier
+  accountId: string;                   // Tallyroot account ID (a UUID, see below)
   bookedAt: string;                    // ISO 8601 datetime (e.g. "2024-03-15T10:30:00Z")
-  currency: string;                    // ISO 4217 currency code (e.g. "USD", "EUR")
+  currency: string;                    // ISO 4217 code; must match the account's currency
   amountMinor: string;                 // Amount in minor units as a string (negative = debit)
   baseAmountMinor?: string | null;     // Amount in base/home currency minor units (optional)
   merchantName?: string | null;        // Merchant display name
@@ -281,6 +282,8 @@ interface IngestTransactionUpsert {
 - Credits (money entering the account) are **positive**: `"150000"` for +$1,500.00
 - All amounts are strings, never JavaScript numbers, to avoid floating-point precision loss
 
+**Account IDs:** every `accountId`, `fromAccountId`, and `toAccountId` is the account's ID in Tallyroot, a UUID such as `3f6c1d2e-8a4b-4c7e-9d1f-2b5a6e8c0a11`. You can find it in the ID column of the Accounts table. The server rejects any other format with HTTP 400. The account must exist and not be archived, and its currency must match the currency you send. For transactions, FX trades, and transfers, it must also be an asset or liability account.
+
 ---
 
 ### IngestFxUpsert
@@ -290,17 +293,19 @@ interface IngestFxUpsert {
   externalTxnId: string;
   fromAccountId: string;
   toAccountId: string;
-  fromAmountMinor: string;             // Amount leaving fromAccount (typically negative)
-  fromCurrency: string;
-  toAmountMinor: string;               // Amount arriving in toAccount (typically positive)
-  toCurrency: string;
+  fromAmountMinor: string;             // Amount leaving fromAccount (non-negative)
+  fromCurrency: string;                // Must match fromAccount's currency
+  toAmountMinor: string;               // Amount arriving in toAccount (non-negative)
+  toCurrency: string;                  // Must match toAccount's currency
   bookedAt: string;                    // ISO 8601 datetime
-  baseFromAmountMinor?: string | null; // fromAmount in base/home currency
-  baseToAmountMinor?: string | null;   // toAmount in base/home currency
+  baseFromAmountMinor?: string | null; // fromAmount in base/home currency (non-negative)
+  baseToAmountMinor?: string | null;   // toAmount in base/home currency (non-negative)
   description?: string | null;
   raw?: Record<string, unknown> | null;
 }
 ```
+
+All four amounts are magnitudes in minor units. Send `baseFromAmountMinor` and `baseToAmountMinor` together or not at all, and make them equal, because both legs of the trade have the same value in your base currency. If you omit them, Tallyroot derives the base amount from whichever leg is in your base currency, or from an FX rate when neither is.
 
 ---
 
@@ -311,8 +316,8 @@ interface IngestTransferUpsert {
   externalTxnId: string;
   fromAccountId: string;
   toAccountId: string;
-  amountMinor: string;                 // Positive value representing the transferred amount
-  currency: string;
+  amountMinor: string;                 // Transferred amount (non-negative magnitude)
+  currency: string;                    // Must match both accounts' currency
   bookedAt: string;                    // ISO 8601 datetime
   description?: string | null;
   raw?: Record<string, unknown> | null;
@@ -544,7 +549,7 @@ The Tallyroot API allows **120 requests per minute** per API key. Requests that 
 A bank connector fetches new transactions from a bank API and pushes them to Tallyroot on a schedule (e.g. every 15 minutes). The key patterns are: fetch incrementally, convert amounts to minor units, deduplicate via `externalTxnId`, and push balance snapshots for reconciliation.
 
 ```ts
-import { TallyrootClient, toMinor, TallyrootApiError } from '@tallyroot/sdk';
+import { TallyrootClient, toMinor, negateMinor } from '@tallyroot/sdk';
 
 const client = new TallyrootClient({
   apiKey: process.env.TALLYROOT_API_KEY!,
@@ -680,7 +685,7 @@ The critical rule: **always use the same `externalTxnId` for all states of a tra
 await client.upsertTransactions([
   {
     externalTxnId: 'txn_abc123',
-    accountId: 'acc_checking',
+    accountId: '3f6c1d2e-8a4b-4c7e-9d1f-2b5a6e8c0a11',
     bookedAt: '2024-03-14T18:00:00Z',
     currency: 'USD',
     amountMinor: '-4550',
@@ -693,7 +698,7 @@ await client.upsertTransactions([
 await client.upsertTransactions([
   {
     externalTxnId: 'txn_abc123',      // Same ID — Tallyroot updates the existing record
-    accountId: 'acc_checking',
+    accountId: '3f6c1d2e-8a4b-4c7e-9d1f-2b5a6e8c0a11',
     bookedAt: '2024-03-16T09:00:00Z', // Settlement date replaces the authorisation date
     currency: 'USD',
     amountMinor: '-4550',
@@ -706,7 +711,7 @@ await client.upsertTransactions([
 await client.upsertTransactions([
   {
     externalTxnId: 'txn_abc123',
-    accountId: 'acc_checking',
+    accountId: '3f6c1d2e-8a4b-4c7e-9d1f-2b5a6e8c0a11',
     bookedAt: '2024-03-14T18:00:00Z',
     currency: 'USD',
     amountMinor: '-4550',
