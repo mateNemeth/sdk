@@ -10,6 +10,13 @@ export interface IngestTransactionUpsert {
   merchantName?: string | null;
   description?: string | null;
   bookingStatus?: 'pending' | 'booked' | 'voided';
+  /**
+   * The `externalTxnId` of a pending card authorization that this row settles
+   * under a new ID. Tallyroot moves the categories, receipt, payee, description
+   * and a hand-set budget month from the authorization onto this row's entry.
+   * Only applied when the same request also re-reports that authorization.
+   */
+  settlesExternalTxnId?: string | null;
   raw?: Record<string, unknown> | null;
 }
 

@@ -273,6 +273,7 @@ interface IngestTransactionUpsert {
   merchantName?: string | null;        // Merchant display name
   description?: string | null;         // Raw description from the bank
   bookingStatus?: 'pending' | 'booked' | 'voided';  // Defaults to 'booked' if omitted
+  settlesExternalTxnId?: string | null; // Pending authorization this row settles under a new ID (see below)
   raw?: Record<string, unknown> | null; // Arbitrary raw payload for debugging
 }
 ```
@@ -717,6 +718,36 @@ await client.upsertTransactions([
     amountMinor: '-4550',
     merchantName: 'Corner Coffee Shop',
     bookingStatus: 'voided',           // Tallyroot removes this from the ledger
+  },
+]);
+```
+
+**When the settlement arrives under a new ID:**
+
+Some card providers book the settlement as a new transaction with its own ID and leave the authorization pending, often with a smaller hold. If you can tell which authorization a settlement belongs to, name it in `settlesExternalTxnId`. Tallyroot then moves what the user already set on the authorization (categories, receipt, payee, description and a hand-set budget month) onto the settled entry, instead of leaving the settled entry uncategorized.
+
+The move happens only when the same request also re-reports the authorization, still pending, with its reduced hold. Put the settlement and its authorization next to each other, and put these pairs at the start of the array, so the SDK's 500-item split never sends them in different requests. The authorization keeps the status you report, so voiding it later works as usual. Omitting the field changes nothing.
+
+```ts
+await client.upsertTransactions([
+  {
+    externalTxnId: 'card:settle_789',          // New ID for the settlement
+    accountId: '3f6c1d2e-8a4b-4c7e-9d1f-2b5a6e8c0a11',
+    bookedAt: '2024-03-16T09:00:00Z',
+    currency: 'USD',
+    amountMinor: '-4550',
+    merchantName: 'Corner Coffee Shop',
+    bookingStatus: 'booked',
+    settlesExternalTxnId: 'card:auth_456',     // The authorization it settles
+  },
+  {
+    externalTxnId: 'card:auth_456',            // The authorization, re-reported
+    accountId: '3f6c1d2e-8a4b-4c7e-9d1f-2b5a6e8c0a11',
+    bookedAt: '2024-03-14T18:00:00Z',
+    currency: 'USD',
+    amountMinor: '0',                          // Its hold, now released
+    merchantName: 'Corner Coffee Shop',
+    bookingStatus: 'pending',
   },
 ]);
 ```
